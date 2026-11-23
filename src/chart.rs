@@ -1,7 +1,7 @@
-use geometry::{DefaultMap, Cell, Map, Terrain};
+use geometry::{Cell, DefaultMap, Map, Terrain};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
-use shared::{Seed, Params, IslandId};
+use shared::{IslandId, Params, Seed};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug)]
@@ -79,7 +79,7 @@ impl Chart {
             map_cells.insert(cell, Terrain::Clear);
         });
 
-        if let Ok(clear_map) = DefaultMap::try_new(radius, map_cells.into_iter()) {
+        if let Ok(clear_map) = DefaultMap::try_new(radius, map_cells) {
             Ok(clear_map)
         } else {
             Err(GenError::Error("Could not generate plain water map".to_string()))
@@ -180,7 +180,7 @@ impl Chart {
             }
         }
 
-        if let Ok(new_map) = DefaultMap::try_new(current.radius(), new_terrains.into_iter()) {
+        if let Ok(new_map) = DefaultMap::try_new(current.radius(), new_terrains) {
             Ok(new_map)
         } else {
             Err(())
@@ -196,7 +196,7 @@ impl Chart {
             cell.neighbours()
                 .into_iter()
                 .filter(|neighbour| map.contains(*neighbour))
-                .for_each(|neighbour| f(neighbour));
+                .for_each(&mut f);
         });
     }
 
@@ -221,15 +221,13 @@ impl Chart {
 mod tests {
     use super::Chart;
     use geometry::*;
-    use rand::{RngExt, SeedableRng};
     use shared::*;
-    use shared::*;
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeSet;
     const TEST_RADII: [u32; 8] = [1, 2, 3, 12, 40, 60, 80, 100];
 
     fn corner_zone(map: &DefaultMap) -> BTreeSet<Cell> {
         let mut corners_and_neighbours: BTreeSet<Cell> = BTreeSet::new();
-        Chart::for_each_cell_and_neighbour(map.corners().into_iter(), &map, |cell| {
+        Chart::for_each_cell_and_neighbour(map.corners().into_iter(), map, |cell| {
             corners_and_neighbours.insert(cell);
         });
         corners_and_neighbours
@@ -295,7 +293,7 @@ mod tests {
             let chart = Chart::generate(seed, &params).expect("Failed to generate map");
             let map = chart.map();
 
-            let generated_cliffs_count = Chart::cells(&map)
+            let generated_cliffs_count = Chart::cells(map)
                 .map(|cell| map.terrain(cell))
                 .filter(|cell_terrain| matches!(*cell_terrain, Some(Terrain::Cliff)))
                 .count();
@@ -312,13 +310,13 @@ mod tests {
             let map = chart.map();
 
             let mut generated_island_ids: BTreeSet<IslandId> = BTreeSet::new();
-            Chart::cells(&map)
+            Chart::cells(map)
                 .map(|cell| map.terrain(cell))
-                .for_each(|cell_terrain|
+                .for_each(|cell_terrain| {
                     if let Some(Terrain::Island(x)) = cell_terrain {
                         generated_island_ids.insert(x);
                     }
-                );
+                });
             let generated_islands_count = generated_island_ids.len();
 
             assert_eq!(generated_islands_count, params.island_count as usize);
