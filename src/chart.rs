@@ -2,15 +2,16 @@ use geometry::{Cell, DefaultMap, Map, Terrain};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use shared::{IslandId, Params, Seed};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 #[derive(Debug)]
-enum GenError {
+pub enum GenError {
     Error(String),
 }
 
-struct Chart {
+pub struct Chart {
     map: DefaultMap,
+    treasure_cell: Cell,
 }
 
 impl Chart {
@@ -18,7 +19,7 @@ impl Chart {
         &self.map
     }
 
-    fn generate(seed: Seed, params: &Params) -> Result<Chart, GenError> {
+    pub fn generate(seed: Seed, params: &Params) -> Result<Chart, GenError> {
         let mut rng = StdRng::seed_from_u64(seed);
 
         if params.archipelago_radius <= params.vision_range {
@@ -26,12 +27,110 @@ impl Chart {
                 "Archipelago radius does not exceed vision range".to_string(),
             ));
         }
+
         let mut current = Chart::plain_water_map(params.archipelago_radius)?;
         current = Chart::generate_islands(&mut rng, &current, params.island_count)?;
         current = Chart::generate_cliffs(&mut rng, &current, params.cliff_count)?;
+        current = Chart::generate_rocks(&mut rng, &current, params.rock_count)?;
 
-        Ok(Self { map: current })
+        if !Chart::check_connected_water(&current) {
+            return Err(GenError::Error("Water cells were not connected".to_string()));
+        }
+
+        let chosen_treasure = Chart::choose_treasure(&mut rng, &current);
+
+        if chosen_treasure.is_none() {
+            return Err(GenError::Error("No suitable treasure cell was found".to_string()));
+        }
+
+        Ok(Self {
+            map: current,
+            treasure_cell: chosen_treasure.unwrap(),
+        })
     }
+
+    fn choose_treasure(rng: &mut StdRng, map: &DefaultMap) -> Option<Cell> {
+        Chart::pick_random_cell(
+            rng,
+            map.water_cells()
+                .into_iter()
+                .filter(|cell| matches!(map.terrain(*cell), Some(Terrain::Clear))),
+        )
+    }
+
+    fn water_dfs_rec(current_cell: Cell, map: &DefaultMap, current_cc: &mut HashSet<Cell>) {
+        if current_cc.insert(current_cell) {
+            current_cell
+                .neighbours()
+                .into_iter()
+                .filter(|neighbour| map.contains(*neighbour) && !current_cc.contains(neighbour))
+                .collect::<Vec<Cell>>()
+                .into_iter()
+                .for_each(|neighbour| Chart::water_dfs_rec(neighbour, map, current_cc));
+        }
+    }
+
+    fn water_dfs(starting_cell: Cell, map: &DefaultMap) -> HashSet<Cell> {
+        let mut connected_water_cells: HashSet<Cell> = HashSet::new();
+        Chart::water_dfs_rec(starting_cell, map, &mut connected_water_cells);
+        connected_water_cells
+    }
+
+    fn water_is_connected(starting_cell: Cell, map: &DefaultMap) -> bool {
+        let connected_cells = Chart::water_dfs(starting_cell, map);
+        map.water_cells().all(|cell| connected_cells.contains(&cell))
+    }
+
+    fn check_connected_water(map: &DefaultMap) -> bool {
+        let starting_cell = map.water_cells().next();
+        if let Some(starting_cell) = starting_cell {
+            Chart::water_is_connected(starting_cell, map)
+        } else {
+            false
+        }
+    }
+
+    fn legal_rock_placements(map: &DefaultMap) -> impl Iterator<Item = Cell> {
+        let mut illegal_rock_placements: BTreeSet<Cell> = BTreeSet::new();
+        let mut insert_into_illegal = |cell| {
+            illegal_rock_placements.insert(cell);
+        };
+
+        Chart::for_each_cell_and_neighbour(map.corners().into_iter(), map, &mut insert_into_illegal);
+        Chart::cells(map)
+            .filter(|cell| {
+                let cell_terrain = map.terrain(*cell);
+                matches!(cell_terrain, Some(Terrain::Island(_))) || matches!(cell_terrain, Some(Terrain::Cliff))
+            })
+            .for_each(|illegal_cell| {
+                insert_into_illegal(illegal_cell);
+            });
+
+        Chart::cells(map).filter(move |candidate| !illegal_rock_placements.contains(candidate))
+    }
+
+    fn generate_rocks(rng: &mut StdRng, map: &DefaultMap, rock_count: u16) -> Result<DefaultMap, GenError> {
+        let mut current_map = map.clone();
+
+        for _ in 0..rock_count {
+            let mut new_rocks: BTreeMap<Cell, Terrain> = BTreeMap::new();
+
+            if let Some(rock_cell) = Chart::pick_random_cell(rng, Chart::legal_rock_placements(&current_map)) {
+                new_rocks.insert(rock_cell, Terrain::Rock);
+            } else {
+                return Err(GenError::Error("Could not generate rocks".to_string()));
+            }
+
+            if let Ok(updated_map) = Chart::apply_modifications(&current_map, &new_rocks) {
+                current_map = updated_map;
+            } else {
+                return Err(GenError::Error("Could not apply modifications".to_string()));
+            }
+        }
+
+        Ok(current_map)
+    }
+
     fn legal_cliff_placements(map: &DefaultMap) -> impl Iterator<Item = Cell> {
         let mut illegal_cliff_placements: BTreeSet<Cell> = BTreeSet::new();
         let mut insert_into_illegal = |cell| {
