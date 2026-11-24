@@ -49,13 +49,30 @@ impl Chart {
         })
     }
 
+    fn legal_treasure_placements(map: &DefaultMap) -> impl Iterator<Item = Cell> {
+        let mut illegal_treasure_placements: BTreeSet<Cell> = BTreeSet::new();
+        let mut insert_into_illegal = |cell| {
+            illegal_treasure_placements.insert(cell);
+        };
+
+        // No corners or corners neighbours
+        Chart::for_each_cell_and_neighbour(map.corners().into_iter(), map, &mut insert_into_illegal);
+
+        // No land or land neighbours
+        let land_cells =
+            Chart::cells(map).filter(|cell| matches!(map.terrain(*cell), Some(Terrain::Island(_) | Terrain::Cliff)));
+        Chart::for_each_cell_and_neighbour(land_cells, map, &mut insert_into_illegal);
+
+        // No rocks
+        Chart::cells(map)
+            .filter(|cell| matches!(map.terrain(*cell), Some(Terrain::Rock)))
+            .for_each(insert_into_illegal);
+
+        Chart::cells(map).filter(move |candidate| !illegal_treasure_placements.contains(candidate))
+    }
     fn choose_treasure(rng: &mut StdRng, map: &DefaultMap) -> Option<Cell> {
-        Chart::pick_random_cell(
-            rng,
-            map.water_cells()
-                .into_iter()
-                .filter(|cell| matches!(map.terrain(*cell), Some(Terrain::Clear))),
-        )
+        let legal_treasure_cells = Chart::legal_treasure_placements(map);
+        Chart::pick_random_cell(rng, legal_treasure_cells)
     }
 
     fn water_dfs_rec(current_cell: Cell, map: &DefaultMap, current_cc: &mut HashSet<Cell>) {
