@@ -5,11 +5,11 @@ use shared::{IslandId, Params, Seed};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug)]
-enum GenError {
+pub enum GenError {
     Error(String),
 }
 
-struct Chart {
+pub struct Chart {
     map: DefaultMap,
 }
 
@@ -18,7 +18,7 @@ impl Chart {
         &self.map
     }
 
-    fn generate(seed: Seed, params: &Params) -> Result<Chart, GenError> {
+    pub fn generate(seed: Seed, params: &Params) -> Result<Chart, GenError> {
         let mut rng = StdRng::seed_from_u64(seed);
 
         if params.archipelago_radius <= params.vision_range {

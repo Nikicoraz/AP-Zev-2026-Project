@@ -2,7 +2,8 @@
 #![deny(clippy::pedantic)]
 
 mod chart;
+mod cartographer;
 
 fn main() {
-    println!("Hello, world!");
+    cartographer::main();
 }
