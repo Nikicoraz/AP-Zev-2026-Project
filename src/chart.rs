@@ -1,8 +1,11 @@
 use geometry::{Cell, DefaultMap, Map, Terrain};
+use clues::Clue;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use shared::{IslandId, Params, Seed};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use islandtrait::island::{Island, IslandInit};
+use crate::dummyisland::DummyIsland;
 
 #[derive(Debug)]
 pub enum GenError {
@@ -12,6 +15,7 @@ pub enum GenError {
 pub struct Chart {
     map: DefaultMap,
     treasure_cell: Cell,
+    islands: Vec<Box<dyn Island>>,
 }
 
 impl Chart {
@@ -43,10 +47,58 @@ impl Chart {
             return Err(GenError::Error("No suitable treasure cell was found".to_string()));
         }
 
+        let clues = Chart::create_clues(&mut rng, params.island_count);
+        let islands = Chart::create_islands(&mut rng, params.island_count, &clues, seed, params)?;
+
+        // if !Crate::is_solvable(&current, clues) {
+        //     return Err(GenError::Error("Generated clues do not satisfy solvability".to_string()));
+        // }
+
         Ok(Self {
             map: current,
             treasure_cell: chosen_treasure.unwrap(),
+            islands,
         })
+    }
+
+    fn is_solvable(map: &DefaultMap, clues: &[Clue]) -> bool {
+        todo!()
+    }
+
+    fn create_clues(rng: &mut StdRng, clue_count: u8) -> Vec<Clue> {
+        let mut clues: Vec<Clue> = Vec::new();
+
+        for _ in 0..clue_count {
+            // TODO: pick random clues
+        }
+
+        clues
+    }
+
+    fn create_islands(rng: &mut StdRng, island_count: u8, clues: &[Clue], seed: Seed, params: &Params) -> Result<Vec<Box<dyn Island>>, GenError> {
+        // TODO: hardcode the island variants
+        let mut islands: Vec<Box<dyn Island>> = Vec::new();
+
+        for idx in 0..island_count {
+            let roll = rand::random::<u16>() % 2; // To be replaced with the different types of islands
+            if let Some(clue) = clues.get(idx as usize) {
+                match roll {
+                    // Workaround to make clippy shut up about any number modulo 1 being 0
+                    0 | 1 => islands.push(Box::new(DummyIsland::new(IslandInit{
+                        clue: *clue,
+                        seed,
+                        params: *params,
+                    }))),
+                    _ => {
+                        return Err(GenError::Error("Invalid roll for island type".to_string()))
+                    }
+                }
+            } else {
+                return Err(GenError::Error(format!("Invalid island index {idx}")));
+            }
+        }
+
+        Ok(islands)
     }
 
     fn legal_treasure_placements(map: &DefaultMap) -> impl Iterator<Item = Cell> {

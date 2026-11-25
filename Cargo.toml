@@ -10,5 +10,6 @@ wind = { package = "ap-2026-common-code-wind", git = "https://github.com/SharedC
 clues = { package = "ap-2026-common-code-clues", git = "https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git" }
 conformance = { package = "ap-2026-common-code-conformance", git = "https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git" }
 messages = { package = "ap-2026-common-code-messages", git = "https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git" }
+islandtrait = { package = "ap-2026-common-code-islandtrait", git = "https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git" }
 rand = "0.10.4"
 macroquad = "0.4.16"

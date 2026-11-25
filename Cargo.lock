@@ -17,36 +17,48 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "ap-2026-common-code-clues"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#0a0361fabf54f70c1d5ee50b88321d69cd9fca39"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
+dependencies = [
+ "ap-2026-common-code-geometry",
+]
 
 [[package]]
 name = "ap-2026-common-code-conformance"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#0a0361fabf54f70c1d5ee50b88321d69cd9fca39"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 
 [[package]]
 name = "ap-2026-common-code-geometry"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#0a0361fabf54f70c1d5ee50b88321d69cd9fca39"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 dependencies = [
  "ap-2026-common-code-shared",
  "thiserror",
 ]
 
 [[package]]
+name = "ap-2026-common-code-islandtrait"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
+dependencies = [
+ "ap-2026-common-code-clues",
+ "ap-2026-common-code-shared",
+]
+
+[[package]]
 name = "ap-2026-common-code-messages"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#0a0361fabf54f70c1d5ee50b88321d69cd9fca39"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 
 [[package]]
 name = "ap-2026-common-code-shared"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#0a0361fabf54f70c1d5ee50b88321d69cd9fca39"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 
 [[package]]
 name = "ap-2026-common-code-wind"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#0a0361fabf54f70c1d5ee50b88321d69cd9fca39"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 dependencies = [
  "ap-2026-common-code-geometry",
  "ap-2026-common-code-shared",
@@ -60,6 +72,7 @@ dependencies = [
  "ap-2026-common-code-clues",
  "ap-2026-common-code-conformance",
  "ap-2026-common-code-geometry",
+ "ap-2026-common-code-islandtrait",
  "ap-2026-common-code-messages",
  "ap-2026-common-code-shared",
  "ap-2026-common-code-wind",

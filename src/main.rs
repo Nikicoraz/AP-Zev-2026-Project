@@ -3,6 +3,7 @@
 
 mod chart;
 mod cartographer;
+mod dummyisland;
 
 fn main() {
     cartographer::main();
