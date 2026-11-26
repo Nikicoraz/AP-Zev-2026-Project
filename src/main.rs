@@ -1,8 +1,8 @@
 #![deny(unsafe_code)]
 #![deny(clippy::pedantic)]
 
-mod chart;
 mod cartographer;
+mod chart;
 mod dummyisland;
 
 fn main() {

@@ -3,17 +3,15 @@ use islandtrait::island::{Island, IslandInit, IslandResponse, MoorResponse};
 use shared::{Round, ShipId};
 
 pub struct DummyIsland {
-    clue: Clue
+    clue: Clue,
 }
 
 impl Island for DummyIsland {
     fn new(init: IslandInit) -> Self
     where
-        Self: Sized
+        Self: Sized,
     {
-        Self {
-            clue: init.clue
-        }
+        Self { clue: init.clue }
     }
 
     fn moor(&mut self, ship: ShipId) {

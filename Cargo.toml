@@ -13,3 +13,5 @@ messages = { package = "ap-2026-common-code-messages", git = "https://github.com
 islandtrait = { package = "ap-2026-common-code-islandtrait", git = "https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git" }
 rand = "0.10.4"
 macroquad = "0.4.16"
+conv = "0.3.3"
+num-integer = "0.1.47"

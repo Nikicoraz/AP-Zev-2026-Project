@@ -1,11 +1,28 @@
+use crate::dummyisland::DummyIsland;
+use clues::Axis;
+use clues::{Bound, Clue};
 use geometry::{Cell, DefaultMap, Map, Terrain};
-use clues::Clue;
+use islandtrait::island::{Island, IslandInit};
+use num_integer::Roots;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use shared::{IslandId, Params, Seed};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-use islandtrait::island::{Island, IslandInit};
-use crate::dummyisland::DummyIsland;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
+
+const POOL_SIZE: usize = 256;
+const POOL_ATTEMPTS_PER_CLUE: usize = 4;
+const RESTARTS: usize = 32;
+const RESIDUE: usize = 2;
+
+// Custom struct type for clue generation.
+// Keeps code a little cleaner.
+struct ClueGenInfo<'a> {
+    water: &'a [Cell],
+    treasure: Cell,
+    radius: i32,
+    min_keep: usize,
+}
 
 #[derive(Debug)]
 pub enum GenError {
@@ -23,7 +40,7 @@ impl Chart {
         &self.map
     }
 
-    pub fn generate(seed: Seed, params: &Params) -> Result<Chart, GenError> {
+    pub fn generate(seed: Seed, params: &Params) -> Result<Self, GenError> {
         let mut rng = StdRng::seed_from_u64(seed);
 
         if params.archipelago_radius <= params.vision_range {
@@ -47,51 +64,310 @@ impl Chart {
             return Err(GenError::Error("No suitable treasure cell was found".to_string()));
         }
 
-        let clues = Chart::create_clues(&mut rng, params.island_count);
-        let islands = Chart::create_islands(&mut rng, params.island_count, &clues, seed, params)?;
+        let treasure_cell = chosen_treasure.unwrap();
 
-        // if !Crate::is_solvable(&current, clues) {
-        //     return Err(GenError::Error("Generated clues do not satisfy solvability".to_string()));
-        // }
+        let islands = Chart::create_islands(&mut rng, params.island_count, &current, treasure_cell, seed, params)?;
 
         Ok(Self {
             map: current,
-            treasure_cell: chosen_treasure.unwrap(),
+            treasure_cell,
             islands,
         })
     }
 
-    fn is_solvable(map: &DefaultMap, clues: &[Clue]) -> bool {
-        todo!()
+    // This function selects the best clue from a clue pool generated a priori.
+    // It does so by computing what is the ideal amount of culled cells based on how many candidates and steps are left;
+    // scoring each clue by how much they get close to such target; then returning the first acceptable clue in the mentioned ranking.
+    fn pick_clue(cgi: &ClueGenInfo<'_>, pool: &[Clue], candidates: &[Cell], steps_left: u8) -> Option<Clue> {
+        let target = Chart::target_kept(candidates.len(), steps_left);
+
+        let mut ranked: Vec<(usize, Clue)> = pool
+            .iter()
+            .filter_map(|clue| {
+                // Amount of candidates after the clue gets applied.
+                let kept = candidates.iter().filter(|cell| clue.holds(**cell)).count();
+                // Whether the clue is admissible. If we are on the last step we need the clue to keep only one cell.
+                // In any other case we want the clue to keep more than one candidate cell.
+                let admissible = if steps_left == 1 { kept == 1 } else { kept > 1 };
+                if admissible {
+                    Some((kept.abs_diff(target), *clue))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Sort the clues by how much they get close to the target.
+        ranked.sort_by_key(|&(error, _)| error);
+
+        // We look inside the ranking choosing the first clue that is not "overpowered".
+        ranked
+            .into_iter()
+            .map(|(_, clue)| clue)
+            .find(|clue| Chart::is_individually_weak(cgi, clue))
     }
 
-    fn create_clues(rng: &mut StdRng, clue_count: u8) -> Vec<Clue> {
-        let mut clues: Vec<Clue> = Vec::new();
-
-        for _ in 0..clue_count {
-            // TODO: pick random clues
+    // This function return the amount of cells we would like the next generated clue to keep.
+    fn target_kept(n: usize, steps_left: u8) -> usize {
+        // If we have only one step left we must aim for keeping exactly 1 cell, the treasure one.
+        if steps_left <= 1 {
+            return 1;
         }
 
-        clues
+        // Otherwise we want to find the number ratio such that n / (ratio^(steps_left - 1)) is about RESIDUE.
+        // In other words, we want to find the number such that, if we were to divide the number of cells n by it
+        // (steps_left - 1) times, then we would get RESIDUE cells.
+        // Such number is the (steps_left - 1)-root of (n / RESIDUE).
+        let root = (n / RESIDUE).nth_root(u32::from(steps_left - 1)).max(1);
+        (n / root).clamp(RESIDUE, n.saturating_sub(1))
     }
 
-    fn create_islands(rng: &mut StdRng, island_count: u8, clues: &[Clue], seed: Seed, params: &Params) -> Result<Vec<Box<dyn Island>>, GenError> {
+    // This function return whether a clue, taken by itself and itself only, is too powerful and culls too many cells at once.
+    // This is not strictly needed and is more of a game design choice.
+    // This can be totally bypassed by changing the min_keep field to 0.
+    fn is_individually_weak(cgi: &ClueGenInfo<'_>, clue: &Clue) -> bool {
+        cgi.water
+            .iter()
+            .filter(|cell| clue.holds(**cell))
+            .take(cgi.min_keep)
+            .count()
+            >= cgi.min_keep
+    }
+
+    // This function generates a POOL_SIZE long pool of valid clues.
+    // The clues in the pool are valid in the sense that they do not cull the treasure cell.
+    // What this function does not consider is how good each clue in the pool, that task is left
+    // for the `pick_clue` function.
+    fn clue_pool(rng: &mut StdRng, cgi: &ClueGenInfo<'_>, candidates: &[Cell]) -> Vec<Clue> {
+        // Decoys are the remaining non-treasure candidates. Created clues are such
+        // that they include the treasure while excluding a chosen decoy, guaranteeing
+        // that every generated clue eliminates at least one candidate.
+        let decoys: Vec<Cell> = candidates
+            .iter()
+            .copied()
+            .filter(|cell| *cell != cgi.treasure)
+            .collect();
+
+        let mut pool = Vec::new();
+        if decoys.is_empty() {
+            return pool;
+        }
+
+        for _ in 0..POOL_SIZE {
+            let mut attempts = 0;
+            while attempts < POOL_ATTEMPTS_PER_CLUE {
+                attempts += 1;
+
+                if let Some(&decoy) = decoys.get(rng.random_range(0..decoys.len()))
+                    && let Some(clue) = Chart::sample_excluding(rng, cgi, decoy)
+                {
+                    pool.push(clue);
+                    break;
+                }
+            }
+        }
+        pool
+    }
+
+    // This function is a helper function that generates a random cell lying inside the map.
+    fn random_cell(rng: &mut StdRng, radius: i32) -> Cell {
+        loop {
+            let q = rng.random_range(-radius..=radius);
+            let r = rng.random_range(-radius..=radius);
+            if (q + r).abs() <= radius {
+                return Cell { q, r };
+            }
+        }
+    }
+
+    fn axis_value(axis: Axis, cell: Cell) -> i32 {
+        match axis {
+            Axis::Q => cell.q,
+            Axis::R => cell.r,
+            Axis::S => cell.s(),
+        }
+    }
+
+    // This function creates a valid clue. A valid clue keeps the treasure cell while excluding the decoy.
+    fn sample_excluding(rng: &mut StdRng, cgi: &ClueGenInfo<'_>, decoy: Cell) -> Option<Clue> {
+        let treasure = cgi.treasure;
+
+        match rng.random_range(0..4) {
+            // Within
+            0 => {
+                let centre = Chart::random_cell(rng, cgi.radius);
+                let to_treasure = centre.distance(treasure);
+                let to_decoy = centre.distance(decoy);
+
+                if to_decoy <= to_treasure {
+                    return None;
+                }
+
+                let room = to_decoy - 1 - to_treasure;
+                Some(Clue::Within {
+                    centre,
+                    radius: to_treasure + rng.random_range(0..=room),
+                })
+            }
+            // Beyond
+            1 => {
+                let centre = Chart::random_cell(rng, cgi.radius);
+                let to_treasure = centre.distance(treasure);
+                let to_decoy = centre.distance(decoy);
+
+                if to_decoy >= to_treasure {
+                    return None;
+                }
+
+                let room = to_treasure - 1 - to_decoy;
+                Some(Clue::Beyond {
+                    centre,
+                    radius: to_treasure - 1 - rng.random_range(0..=room),
+                })
+            }
+            // HalfPlane
+            2 => {
+                let axes = [Axis::Q, Axis::R, Axis::S];
+                let chosen_axis = axes.get(rng.random_range(0..axes.len())).copied()?;
+                let at_treasure = Chart::axis_value(chosen_axis, treasure);
+                let at_decoy = Chart::axis_value(chosen_axis, decoy);
+
+                let gap = (at_treasure - at_decoy).abs();
+
+                // Treasure and decoy lie on the same coordinate with respect to the chosen axis.
+                if gap == 0 {
+                    return None;
+                }
+
+                let slack = rng.random_range(0..=(gap - 1));
+                // Chose which half to keep based on the relation between treasure and decoy positions.
+                let bound = if at_decoy < at_treasure {
+                    Bound::AtLeast(at_treasure.saturating_sub(slack))
+                } else {
+                    Bound::AtMost(at_treasure.saturating_add(slack))
+                };
+
+                Some(Clue::HalfPlane {
+                    axis: chosen_axis,
+                    bound,
+                })
+            }
+
+            // Nearer
+            _ => {
+                let mut a = Chart::random_cell(rng, cgi.radius);
+                let mut b = Chart::random_cell(rng, cgi.radius);
+
+                match treasure.distance(a).cmp(&treasure.distance(b)) {
+                    // If the two random points are equally distant, nothing can be done.
+                    Ordering::Equal => return None,
+                    // We enforce a to be the nearest cell.
+                    Ordering::Greater => std::mem::swap(&mut a, &mut b),
+                    // What we wanted.
+                    Ordering::Less => {}
+                }
+
+                // If the clue holds true for the decoy as well we discard it.
+                if decoy.distance(a) < decoy.distance(b) {
+                    return None;
+                }
+
+                Some(Clue::Nearer { a, b })
+            }
+        }
+    }
+
+    // This function tries and generate a set of clues.
+    // The way it could return None is by not being able to pick a clue for a given step.
+    fn try_build(rng: &mut StdRng, cgi: &ClueGenInfo<'_>, clue_count: u8) -> Option<Vec<Clue>> {
+        let mut candidates = cgi.water.to_vec();
+        let mut clues = Vec::new();
+
+        for steps_left in (1..=clue_count).rev() {
+            let pool = Chart::clue_pool(rng, cgi, &candidates);
+            let clue = Chart::pick_clue(cgi, &pool, &candidates, steps_left)?;
+            candidates.retain(|c| clue.holds(*c));
+            clues.push(clue);
+        }
+
+        Some(clues)
+    }
+
+    // This function checks whether the generated clues make the game solvable.
+    fn is_sufficient(cgi: &ClueGenInfo<'_>, clues: &[Clue]) -> bool {
+        let survivors: Vec<&Cell> = cgi
+            .water
+            .iter()
+            .filter(|cell| clues.iter().all(|clue| clue.holds(**cell)))
+            .collect();
+
+        // There must be only one survivor left
+        if survivors.len() != 1 {
+            return false;
+        }
+        // Such cell must be the treasure cell itself
+        survivors.first() == Some(&&cgi.treasure)
+    }
+
+    fn create_clues(rng: &mut StdRng, clue_count: u8, map: &DefaultMap, treasure: Cell) -> Result<Vec<Clue>, GenError> {
+        if clue_count == 0 {
+            return Err(GenError::Error("Cannot create zero clues".to_string()));
+        }
+
+        let radius = i32::try_from(map.radius())
+            .map_err(|_| GenError::Error("Archipelago radius does not fit a coordinate".to_string()))?;
+        let water: Vec<Cell> = map.water_cells().collect();
+
+        let cgi = ClueGenInfo {
+            water: &water,
+            treasure,
+            radius,
+            min_keep: water.len() / ((2 * clue_count) as usize),
+        };
+
+        for _ in 0..RESTARTS {
+            if let Some(clues) = Chart::try_build(rng, &cgi, clue_count)
+                && Chart::is_sufficient(&cgi, &clues)
+            {
+                return Ok(clues);
+            }
+        }
+
+        Err(GenError::Error(
+            "Could not generate a solvable set of clues".to_string(),
+        ))
+    }
+
+    fn create_islands(
+        rng: &mut StdRng,
+        island_count: u8,
+        map: &DefaultMap,
+        treasure: Cell,
+        seed: Seed,
+        params: &Params,
+    ) -> Result<Vec<Box<dyn Island>>, GenError> {
+        let clues = Chart::create_clues(rng, params.island_count, map, treasure)?;
+
+        let left_out_cells: Vec<Cell> = Chart::cells(map)
+            .filter(|cell| clues.iter().all(|clue| clue.holds(*cell)))
+            .collect();
+
+        println!("{left_out_cells:?}");
+        println!("{treasure:?}");
+
         // TODO: hardcode the island variants
         let mut islands: Vec<Box<dyn Island>> = Vec::new();
 
         for idx in 0..island_count {
-            let roll = rand::random::<u16>() % 2; // To be replaced with the different types of islands
             if let Some(clue) = clues.get(idx as usize) {
-                match roll {
-                    // Workaround to make clippy shut up about any number modulo 1 being 0
-                    0 | 1 => islands.push(Box::new(DummyIsland::new(IslandInit{
+                match rng.random_range(0..2) {
+                    // TODO: insert the correct island variants
+                    0 | 1 => islands.push(Box::new(DummyIsland::new(IslandInit {
                         clue: *clue,
                         seed,
                         params: *params,
                     }))),
-                    _ => {
-                        return Err(GenError::Error("Invalid roll for island type".to_string()))
-                    }
+                    _ => return Err(GenError::Error("Invalid roll for island type".to_string())),
                 }
             } else {
                 return Err(GenError::Error(format!("Invalid island index {idx}")));
@@ -127,31 +403,52 @@ impl Chart {
         Chart::pick_random_cell(rng, legal_treasure_cells)
     }
 
-    fn water_dfs_rec(current_cell: Cell, map: &DefaultMap, current_cc: &mut HashSet<Cell>) {
-        if current_cc.insert(current_cell) {
-            current_cell
+    fn water_bfs(starting_cell: Cell, map: &DefaultMap) -> HashSet<Cell> {
+        let mut connected_water_cells: HashSet<Cell> = HashSet::new();
+
+        if !map.contains(starting_cell) || !matches!(map.terrain(starting_cell), Some(Terrain::Clear)) {
+            return connected_water_cells;
+        }
+
+        let mut queue: VecDeque<Cell> = VecDeque::new();
+        queue.push_back(starting_cell);
+        connected_water_cells.insert(starting_cell);
+
+        while let Some(current) = queue.pop_front() {
+            let next_cells: Vec<Cell> = current
                 .neighbours()
                 .into_iter()
-                .filter(|neighbour| map.contains(*neighbour) && !current_cc.contains(neighbour))
-                .collect::<Vec<Cell>>()
-                .into_iter()
-                .for_each(|neighbour| Chart::water_dfs_rec(neighbour, map, current_cc));
-        }
-    }
+                .filter(|neighbour| {
+                    map.contains(*neighbour)
+                        && !connected_water_cells.contains(neighbour)
+                        && matches!(map.terrain(*neighbour), Some(Terrain::Clear))
+                })
+                .collect();
 
-    fn water_dfs(starting_cell: Cell, map: &DefaultMap) -> HashSet<Cell> {
-        let mut connected_water_cells: HashSet<Cell> = HashSet::new();
-        Chart::water_dfs_rec(starting_cell, map, &mut connected_water_cells);
+            for neighbour in next_cells {
+                connected_water_cells.insert(neighbour);
+                queue.push_back(neighbour);
+            }
+        }
+
         connected_water_cells
     }
 
     fn water_is_connected(starting_cell: Cell, map: &DefaultMap) -> bool {
-        let connected_cells = Chart::water_dfs(starting_cell, map);
-        map.water_cells().all(|cell| connected_cells.contains(&cell))
+        let connected_cells = Chart::water_bfs(starting_cell, map);
+        Chart::cells(map)
+            .filter(|cell| {
+                map.terrain(*cell)
+                    .is_some_and(|terrain| matches!(terrain, Terrain::Clear))
+            })
+            .all(|cell| connected_cells.contains(&cell))
     }
 
     fn check_connected_water(map: &DefaultMap) -> bool {
-        let starting_cell = map.water_cells().next();
+        let starting_cell = Chart::cells(map).find(|cell| {
+            map.terrain(*cell)
+                .is_some_and(|terrain| matches!(terrain, Terrain::Clear))
+        });
         if let Some(starting_cell) = starting_cell {
             Chart::water_is_connected(starting_cell, map)
         } else {
