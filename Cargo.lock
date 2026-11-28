@@ -3,25 +3,8 @@
 version = 4
 
 [[package]]
-name = "ap-2026-common-code"
-version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
-dependencies = [
- "ap-2026-common-code-clues",
- "ap-2026-common-code-conformance",
- "ap-2026-common-code-geometry",
- "ap-2026-common-code-islandtrait",
- "ap-2026-common-code-messages",
- "ap-2026-common-code-shared",
- "ap-2026-common-code-shiptrait",
- "ap-2026-common-code-views",
- "ap-2026-common-code-wind",
-]
-
-[[package]]
 name = "ap-2026-common-code-clues"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
 dependencies = [
  "ap-2026-common-code-geometry",
 ]
@@ -29,49 +12,61 @@ dependencies = [
 [[package]]
 name = "ap-2026-common-code-conformance"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 
 [[package]]
 name = "ap-2026-common-code-geometry"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
 dependencies = [
- "ap-2026-common-code-shared",
+ "ap-2026-common-code-shared 0.1.0",
  "thiserror",
 ]
 
 [[package]]
 name = "ap-2026-common-code-islandtrait"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
+dependencies = [
+ "ap-2026-common-code-clues",
+ "ap-2026-common-code-shared 0.1.0 (git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git)",
+]
+
+[[package]]
+name = "ap-2026-common-code-logging"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 
 [[package]]
 name = "ap-2026-common-code-messages"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 
 [[package]]
 name = "ap-2026-common-code-shared"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
+
+[[package]]
+name = "ap-2026-common-code-shared"
+version = "0.1.0"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 
 [[package]]
 name = "ap-2026-common-code-shiptrait"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 
 [[package]]
 name = "ap-2026-common-code-views"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 
 [[package]]
 name = "ap-2026-common-code-wind"
 version = "0.1.0"
-source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026?branch=main#5a2c06158f32825cc7afe438b0e96615894d18be"
+source = "git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git#863b81bf40643f3350c83f3990f2a79101bc7f56"
 dependencies = [
  "ap-2026-common-code-geometry",
- "ap-2026-common-code-shared",
+ "ap-2026-common-code-shared 0.1.0 (git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git)",
  "rand",
 ]
 
@@ -79,7 +74,17 @@ dependencies = [
 name = "ap-zev-2026-project"
 version = "0.1.0"
 dependencies = [
- "ap-2026-common-code",
+ "ap-2026-common-code-clues",
+ "ap-2026-common-code-conformance",
+ "ap-2026-common-code-geometry",
+ "ap-2026-common-code-islandtrait",
+ "ap-2026-common-code-logging",
+ "ap-2026-common-code-messages",
+ "ap-2026-common-code-shared 0.1.0 (git+https://github.com/SharedCode-UniTn-AP-2026/Common_Code-AP_2026.git)",
+ "ap-2026-common-code-shiptrait",
+ "ap-2026-common-code-views",
+ "ap-2026-common-code-wind",
+ "rand",
 ]
 
 [[package]]
